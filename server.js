@@ -16,7 +16,7 @@ const pastaRelatorios = path.join(__dirname, 'relatorios');
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 
 // CONEXÃO COM O MONGODB ATLAS
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:<db_password>@dadoscaixa.nnb7cjq.mongodb.net/?appName=dadoscaixa"
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:K0UHfi7xzv48zvsP@dadoscaixa.nnb7cjq.mongodb.net/?appName=dadoscaixa"
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
   .catch(err => console.error('❌ Erro de Conexão no MongoDB:', err));
