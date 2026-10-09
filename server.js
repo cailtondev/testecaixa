@@ -12,16 +12,15 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
-
 const pastaRelatorios = path.join(__dirname, 'relatorios');
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 
-// CONEXÃO COM O MONGODB ATLAS (Troque SUA_SENHA_AQUI pela senha do banco)
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:cailton@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
+// CONEXÃO COM O MONGODB ATLAS
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:bTpcMLimRIP4gUes@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
 
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
-  .catch(err => console.error('❌ Erro ao conectar no MongoDB Atlas. Verifique a senha e o IP:', err));
+  .catch(err => console.error('❌ Erro de Conexão no MongoDB:', err));
 
 // SCHEMA DE PRODUTOS
 const produtoSchema = new mongoose.Schema({
@@ -50,16 +49,19 @@ app.get('/comanda', (req, res) => res.sendFile(path.join(__dirname, 'public', 'c
 app.get('/escritorio', (req, res) => res.sendFile(path.join(__dirname, 'public', 'escritorio.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'caixa.html')));
 
-io.on('connection', async (socket) => {
-  let listaProds = [];
-  try {
-    listaProds = await Produto.find().sort({ id: 1 });
-  } catch (e) {
-    console.error('Erro ao buscar produtos:', e);
-  }
-
+io.on('connection', (socket) => {
+  // 1. Envia imediatamente o estado do caixa e turno (destrava a tela do caixa)
   socket.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
-  socket.emit('atualizar-produtos', listaProds);
+
+  // 2. Busca produtos sem travar a conexão
+  Produto.find().sort({ id: 1 })
+    .then(listaProds => {
+      socket.emit('atualizar-produtos', listaProds);
+    })
+    .catch(err => {
+      console.error('Erro ao buscar produtos:', err);
+      socket.emit('atualizar-produtos', []);
+    });
 
   socket.on('login-balcao', (pin) => {
     if (pin !== PIN_BALCAO) {
