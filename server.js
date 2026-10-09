@@ -15,11 +15,12 @@ app.use(express.static('public'));
 const pastaRelatorios = path.join(__dirname, 'relatorios');
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 
-// CONEXÃO COM O MONGODB ATLAS
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:K0UHfi7xzv48zvsP@dadoscaixa.nnb7cjq.mongodb.net/?appName=dadoscaixa"
+// CONEXÃO COM O MONGODB ATLAS (Troque SUA_SENHA_AQUI pela senha do banco)
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:bTpcMLimRIP4gUes@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
+
 mongoose.connect(MONGO_URI)
   .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
-  .catch(err => console.error('❌ Erro de Conexão no MongoDB:', err));
+  .catch(err => console.error('❌ Erro ao conectar no MongoDB Atlas. Verifique a senha e o IP:', err));
 
 // SCHEMA DE PRODUTOS
 const produtoSchema = new mongoose.Schema({
@@ -45,12 +46,17 @@ function recalcularTotal(numComanda) {
 }
 
 app.get('/comanda', (req, res) => res.sendFile(path.join(__dirname, 'public', 'comanda.html')));
+app.get('/escritorio', (req, res) => res.sendFile(path.join(__dirname, 'public', 'escritorio.html')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'caixa.html')));
 
 io.on('connection', async (socket) => {
-  // Busca produtos no MongoDB ao conectar
-  const listaProds = await Produto.find().sort({ id: 1 });
-  
+  let listaProds = [];
+  try {
+    listaProds = await Produto.find().sort({ id: 1 });
+  } catch (e) {
+    console.error('Erro ao buscar produtos:', e);
+  }
+
   socket.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
   socket.emit('atualizar-produtos', listaProds);
 
@@ -62,14 +68,12 @@ io.on('connection', async (socket) => {
     socket.emit('login-resposta', { sucesso: true, msg: 'Autorizado!' });
   });
 
-  // ACIONAMENTO DE ALERTA DE ÔNIBUS (Caixa / Escritório)
   socket.on('alternar-alerta-onibus', (status) => {
     modoOnibusAtivo = status;
     io.emit('alerta-onibus-disparado', modoOnibusAtivo);
     io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
   });
 
-  // GESTÃO DE PRODUTOS (ESCRITÓRIO)
   socket.on('salvar-produto', async (pData) => {
     try {
       const prodFormatado = {
@@ -89,12 +93,15 @@ io.on('connection', async (socket) => {
   });
 
   socket.on('deletar-produto', async (id) => {
-    await Produto.deleteOne({ id: String(id) });
-    const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
-    io.emit('atualizar-produtos', listaProdsAtualizada);
+    try {
+      await Produto.deleteOne({ id: String(id) });
+      const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
+      io.emit('atualizar-produtos', listaProdsAtualizada);
+    } catch (e) {
+      console.error('Erro ao deletar produto:', e);
+    }
   });
 
-  // LANÇAMENTOS
   socket.on('lancar-item', (data) => {
     const { numComanda, itemObj, tabela, qtd = 1 } = data;
     if (!numComanda) return;
