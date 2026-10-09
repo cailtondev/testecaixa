@@ -21,7 +21,6 @@
     .btn-fechar { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .btn-turno { background: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
     
-    /* Botão de Ônibus Discreto */
     .btn-alerta {
       background: #f8f9fa;
       color: #333;
@@ -50,8 +49,8 @@
 
   <div class="header-caixa">
     <div>
-      <h2 id="nomeTurno" style="margin: 0; color: #333;">Carregando turno...</h2>
-      <small id="inicioTurno" style="color: #666;"></small>
+      <h2 id="nomeTurno" style="margin: 0; color: #333;">Aguardando dados...</h2>
+      <small id="inicioTurno" style="color: #666; display: block; margin-top: 4px;"></small>
     </div>
     <div style="display: flex; align-items: center;">
       <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">
@@ -62,31 +61,51 @@
   </div>
 
   <h2>Comandas Ativas no Caixa</h2>
-  <div id="gridComandas" class="grid-comandas"></div>
+  <div id="gridComandas" class="grid-comandas">
+    <h3>Carregando comandas...</h3>
+  </div>
 
   <script>
     const socket = io();
     let modoOnibusAtual = false;
 
-    socket.on('atualizar-caixa', (data) => {
-      const { comandas, turno, modoOnibus } = data;
-      modoOnibusAtual = modoOnibus;
+    socket.on('connect', () => {
+      console.log('Socket conectado com sucesso!');
+    });
 
+    socket.on('atualizar-caixa', (data) => {
+      if (!data) return;
+      
+      const comandas = data.comandas || {};
+      const turno = data.turno || { nome: 'Turno 1 - Manhã', inicio: new Date() };
+      modoOnibusAtual = !!data.modoOnibus;
+
+      // Atualiza o Botão de Alerta
       const btnA = document.getElementById('btnAlerta');
-      if (modoOnibus) {
-        btnA.classList.add('ativo');
-        btnA.innerHTML = "🚌 <span>Ônibus Ativo</span>";
-      } else {
-        btnA.classList.remove('ativo');
-        btnA.innerHTML = "🚌 <span>Ônibus</span>";
+      if (btnA) {
+        if (modoOnibusAtual) {
+          btnA.classList.add('ativo');
+          btnA.innerHTML = "🚌 <span>Ônibus Ativo</span>";
+        } else {
+          btnA.classList.remove('ativo');
+          btnA.innerHTML = "🚌 <span>Ônibus</span>";
+        }
       }
 
-      document.getElementById('nomeTurno').innerText = turno.nome;
-      document.getElementById('inicioTurno').innerText = `Aberto em: ${new Date(turno.inicio).toLocaleString('pt-BR')}`;
+      // Atualiza os cabeçalhos de Turno
+      const elNomeTurno = document.getElementById('nomeTurno');
+      const elInicioTurno = document.getElementById('inicioTurno');
+      
+      if (elNomeTurno) elNomeTurno.innerText = turno.nome || "Turno Em Andamento";
+      if (elInicioTurno) elInicioTurno.innerText = `Aberto em: ${new Date(turno.inicio).toLocaleString('pt-BR')}`;
 
+      // Atualiza o Grid de Comandas
       const grid = document.getElementById('gridComandas');
+      if (!grid) return;
+      
       grid.innerHTML = '';
       const keys = Object.keys(comandas);
+      
       if (keys.length === 0) {
         grid.innerHTML = '<h3>Nenhuma comanda aberta no momento.</h3>';
         return;
@@ -95,8 +114,44 @@
       keys.forEach(num => {
         const c = comandas[num];
         const card = document.createElement('div');
-        card.className = `card-comanda ${c.tabela}`;
+        card.className = `card-comanda ${c.tabela || 'onibus'}`;
 
-        let itensHTML = c.itens.map(i => {
+        let itensHTML = (c.itens || []).map(i => {
           const txtQtd = i.qtd > 1 ? `<b>${i.qtd}x</b> ` : '';
-          return `<div class="item"><span>${
+          return `<div class="item"><span>${txtQtd}${i.nome}</span><span>R$ ${(i.preco * i.qtd).toFixed(2)}</span></div>`;
+        }).join('');
+
+        card.innerHTML = `
+          <div class="comanda-header">
+            <span class="num-comanda">Comanda #${num}</span>
+            <span class="badge ${c.tabela || 'onibus'}">${(c.tabela || 'onibus').toUpperCase()}</span>
+          </div>
+          <div class="lista-itens">${itensHTML}</div>
+          <div class="total">TOTAL: R$ ${(c.total || 0).toFixed(2)}</div>
+          <button class="btn-fechar" onclick="cobrar('${num}', ${(c.total || 0).toFixed(2)})">Cobrar e Liberar</button>
+        `;
+        grid.appendChild(card);
+      });
+    });
+
+    function alternarAlerta() {
+      socket.emit('alternar-alerta-onibus', !modoOnibusAtual);
+    }
+
+    function cobrar(numComanda, total) {
+      if (confirm(`Cobrar R$ ${total} da Comanda #${numComanda}?`)) {
+        socket.emit('fechar-comanda', numComanda);
+      }
+    }
+
+    function fecharTurno() {
+      const proximoTurno = prompt("Nome do PRÓXIMO turno (ex: Turno 2 - Almoço):");
+      if (proximoTurno) socket.emit('fechar-turno', proximoTurno);
+    }
+
+    socket.on('turno-fechado-sucesso', (nomeArquivo) => {
+      alert(`Caixa fechado com sucesso!\nRelatório gerado em /relatorios:\n${nomeArquivo}`);
+    });
+  </script>
+</body>
+</html>
