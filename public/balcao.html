@@ -21,7 +21,20 @@
     .modal-content { background: white; padding: 25px; border-radius: 10px; text-align: center; width: 85%; max-width: 350px; }
     .categoria-bloco { display: none; }
     .categoria-bloco.ativa { display: block; }
-    .banner-onibus { display: none; background: #dc3545; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 18px; border-radius: 6px; margin-bottom: 12px; }
+    
+    /* Alerta Discreto de Ônibus */
+    .banner-onibus {
+      display: none;
+      background: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+      padding: 8px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 6px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
   </style>
 </head>
 <body>
@@ -37,7 +50,9 @@
 
   <div id="conteudoBalcao" style="display: none;">
     
-    <div id="bannerOnibus" class="banner-onibus">🚌 ATENÇÃO: ÔNIBUS CHEGOU! TABELA ÔNIBUS ATIVADA</div>
+    <div id="bannerOnibus" class="banner-onibus">
+      🚌 Tabela Ônibus ativada automaticamente
+    </div>
 
     <div class="card">
       <label><b>Nº da Comanda:</b></label>
