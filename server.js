@@ -1,52 +1,39 @@
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const mongoose = require('mongoose');
 const fs = require('fs');
 const path = require('path');
 const PDFDocument = require('pdfkit');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: { origin: "*" }
-});
+const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
 const pastaRelatorios = path.join(__dirname, 'relatorios');
-const arqProdutos = path.join(__dirname, 'produtos.json');
-
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 
-// Produtos Iniciais Padrão
-const produtosPadrao = [
-  { id: "202", nome: "Salgado Frito", categoria: "comidas", precoOnibus: 8.00, precoPasseio: 9.00 },
-  { id: "201", nome: "Salgado Assado", categoria: "comidas", precoOnibus: 8.00, precoPasseio: 9.00 },
-  { id: "117", nome: "Refri Lata", categoria: "bebidas", precoOnibus: 10.00, precoPasseio: 10.00 },
-  { id: "134", nome: "Cerveja Lata", categoria: "cervejas", precoOnibus: 9.00, precoPasseio: 10.00 }
-];
+// CONEXÃO COM O MONGODB ATLAS
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:<db_password>@dadoscaixa.nnb7cjq.mongodb.net/?appName=dadoscaixa"
+mongoose.connect(MONGO_URI)
+  .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
+  .catch(err => console.error('❌ Erro de Conexão no MongoDB:', err));
 
-let produtos = [];
-function carregarProdutos() {
-  if (fs.existsSync(arqProdutos)) {
-    try {
-      produtos = JSON.parse(fs.readFileSync(arqProdutos, 'utf-8'));
-    } catch (e) {
-      produtos = produtosPadrao;
-    }
-  } else {
-    produtos = produtosPadrao;
-    salvarProdutos();
-  }
-}
+// SCHEMA DE PRODUTOS
+const produtoSchema = new mongoose.Schema({
+  id: { type: String, required: true, unique: true },
+  nome: String,
+  categoria: String,
+  precoOnibus: Number,
+  precoPasseio: Number
+});
+const Produto = mongoose.model('Produto', produtoSchema);
 
-function salvarProdutos() {
-  fs.writeFileSync(arqProdutos, JSON.stringify(produtos, null, 2));
-}
-carregarProdutos();
-
-const PIN_BALCAO = "1234"; // Código PIN de Acesso ao Balcão
+const PIN_BALCAO = "1234";
 let comandasAtivas = {};
+let modoOnibusAtivo = false;
 let turnoAtual = { nome: "Turno 1 - Manhã", inicio: new Date(), historicoVendas: [] };
 
 function recalcularTotal(numComanda) {
@@ -57,16 +44,16 @@ function recalcularTotal(numComanda) {
   }
 }
 
-// Rota para abrir a comanda via QR Code
-app.get('/comanda', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'comanda.html'));
-});
+app.get('/comanda', (req, res) => res.sendFile(path.join(__dirname, 'public', 'comanda.html')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'caixa.html')));
 
-io.on('connection', (socket) => {
-  socket.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
-  socket.emit('atualizar-produtos', produtos);
+io.on('connection', async (socket) => {
+  // Busca produtos no MongoDB ao conectar
+  const listaProds = await Produto.find().sort({ id: 1 });
+  
+  socket.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
+  socket.emit('atualizar-produtos', listaProds);
 
-  // Autenticação Balconista
   socket.on('login-balcao', (pin) => {
     if (pin !== PIN_BALCAO) {
       socket.emit('login-resposta', { sucesso: false, msg: 'Código incorreto!' });
@@ -75,31 +62,39 @@ io.on('connection', (socket) => {
     socket.emit('login-resposta', { sucesso: true, msg: 'Autorizado!' });
   });
 
-  // Gestão de Produtos
-  socket.on('salvar-produto', (pData) => {
-    const idx = produtos.findIndex(p => p.id === pData.id);
-    const prodFormatado = {
-      id: String(pData.id).trim(),
-      nome: pData.nome,
-      categoria: pData.categoria,
-      precoOnibus: parseFloat(pData.precoOnibus) || 0,
-      precoPasseio: parseFloat(pData.precoPasseio) || 0
-    };
-
-    if (idx >= 0) produtos[idx] = prodFormatado;
-    else produtos.push(prodFormatado);
-
-    salvarProdutos();
-    io.emit('atualizar-produtos', produtos);
+  // ACIONAMENTO DE ALERTA DE ÔNIBUS (Caixa / Escritório)
+  socket.on('alternar-alerta-onibus', (status) => {
+    modoOnibusAtivo = status;
+    io.emit('alerta-onibus-disparado', modoOnibusAtivo);
+    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
   });
 
-  socket.on('deletar-produto', (id) => {
-    produtos = produtos.filter(p => p.id !== String(id));
-    salvarProdutos();
-    io.emit('atualizar-produtos', produtos);
+  // GESTÃO DE PRODUTOS (ESCRITÓRIO)
+  socket.on('salvar-produto', async (pData) => {
+    try {
+      const prodFormatado = {
+        id: String(pData.id).trim(),
+        nome: pData.nome,
+        categoria: pData.categoria,
+        precoOnibus: parseFloat(pData.precoOnibus) || 0,
+        precoPasseio: parseFloat(pData.precoPasseio) || 0
+      };
+
+      await Produto.findOneAndUpdate({ id: prodFormatado.id }, prodFormatado, { upsert: true, new: true });
+      const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
+      io.emit('atualizar-produtos', listaProdsAtualizada);
+    } catch (e) {
+      console.error('Erro ao salvar produto:', e);
+    }
   });
 
-  // Lançamentos
+  socket.on('deletar-produto', async (id) => {
+    await Produto.deleteOne({ id: String(id) });
+    const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
+    io.emit('atualizar-produtos', listaProdsAtualizada);
+  });
+
+  // LANÇAMENTOS
   socket.on('lancar-item', (data) => {
     const { numComanda, itemObj, tabela, qtd = 1 } = data;
     if (!numComanda) return;
@@ -128,7 +123,7 @@ io.on('connection', (socket) => {
     }
 
     recalcularTotal(numComanda);
-    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
+    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
   });
 
   socket.on('lancar-manual', (data) => {
@@ -142,7 +137,7 @@ io.on('connection', (socket) => {
 
     comandasAtivas[numComanda].itens.push({ nome, preco: valPreco, qtd: 1 });
     recalcularTotal(numComanda);
-    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
+    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
   });
 
   socket.on('remover-item', (data) => {
@@ -153,11 +148,10 @@ io.on('connection', (socket) => {
       else comandasAtivas[numComanda].itens.splice(indexItem, 1);
 
       recalcularTotal(numComanda);
-      io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
+      io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
     }
   });
 
-  // Fechamento da Comanda
   socket.on('fechar-comanda', (numComanda) => {
     if (comandasAtivas[numComanda]) {
       turnoAtual.historicoVendas.push({
@@ -166,11 +160,10 @@ io.on('connection', (socket) => {
         horaPagamento: new Date().toLocaleTimeString('pt-BR')
       });
       delete comandasAtivas[numComanda];
-      io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
+      io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
     }
   });
 
-  // Relatório e Fechamento de Caixa
   socket.on('fechar-turno', (novoNomeTurno) => {
     const agora = new Date();
     const dataStr = agora.toISOString().split('T')[0];
@@ -207,7 +200,7 @@ io.on('connection', (socket) => {
     doc.end();
 
     turnoAtual = { nome: novoNomeTurno || "Novo Turno", inicio: new Date(), historicoVendas: [] };
-    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual });
+    io.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
     socket.emit('turno-fechado-sucesso', nomeArquivo);
   });
 });
