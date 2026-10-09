@@ -8,6 +8,7 @@
   <style>
     body { font-family: sans-serif; padding: 20px; background: #eef2f5; margin: 0; }
     .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .header-escritorio { display: flex; justify-content: space-between; align-items: center; }
     .form-prod { display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; }
     .form-prod input, .form-prod select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
     .btn-salvar { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; }
@@ -16,15 +17,38 @@
     th { background: #f8f9fa; }
     .btn-edit { background: #ffc107; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; }
     .btn-del { background: #dc3545; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; }
-    .btn-alerta { background: #ffc107; color: #000; border: none; padding: 15px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 18px; width: 100%; margin-bottom: 20px; }
-    .btn-alerta.ativo { background: #dc3545; color: white; }
+    
+    /* Botão de Ônibus Discreto */
+    .btn-alerta {
+      background: #f8f9fa;
+      color: #333;
+      border: 1px solid #ced4da;
+      padding: 9px 16px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+    .btn-alerta:hover { background: #e2e6ea; }
+    .btn-alerta.ativo {
+      background: #dc3545;
+      color: white;
+      border-color: #dc3545;
+      box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
+    }
   </style>
 </head>
 <body>
 
-  <div class="card">
-    <h2>Painel do Escritório - Boi da Estrada</h2>
-    <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">🚨 DISPARAR ALERTA DE ÔNIBUS PARA O BALCÃO</button>
+  <div class="card header-escritorio">
+    <h2 style="margin:0;">Painel do Escritório - Boi da Estrada</h2>
+    <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">
+      🚌 <span>Ativar Tabela Ônibus</span>
+    </button>
   </div>
 
   <div class="card">
@@ -67,10 +91,10 @@
       const btnA = document.getElementById('btnAlerta');
       if (modoOnibusAtual) {
         btnA.classList.add('ativo');
-        btnA.innerText = "🚌 ALERTA DE ÔNIBUS ATIVO (CLIQUE PARA DESATIVAR)";
+        btnA.innerHTML = "🚌 <span>Tabela Ônibus Ativa</span>";
       } else {
         btnA.classList.remove('ativo');
-        btnA.innerText = "🚨 DISPARAR ALERTA DE ÔNIBUS PARA O BALCÃO";
+        btnA.innerHTML = "🚌 <span>Ativar Tabela Ônibus</span>";
       }
     });
 
