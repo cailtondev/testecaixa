@@ -20,9 +20,30 @@
     .total { font-size: 20px; font-weight: bold; text-align: right; margin-top: 10px; color: #d9534f; border-top: 1px solid #eee; padding-top: 5px; }
     .btn-fechar { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .btn-turno { background: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-    .btn-alerta { background: #ffc107; color: #000; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 15px; margin-right: 10px; }
-    .btn-alerta.ativo { background: #dc3545; color: white; animation: pisca 1s infinite; }
-    @keyframes pisca { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+    
+    /* Botão de Ônibus Discreto */
+    .btn-alerta {
+      background: #f8f9fa;
+      color: #333;
+      border: 1px solid #ced4da;
+      padding: 9px 14px;
+      border-radius: 6px;
+      font-weight: 600;
+      font-size: 14px;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      margin-right: 10px;
+      transition: all 0.2s ease;
+    }
+    .btn-alerta:hover { background: #e2e6ea; }
+    .btn-alerta.ativo {
+      background: #dc3545;
+      color: white;
+      border-color: #dc3545;
+      box-shadow: 0 2px 5px rgba(220, 53, 69, 0.3);
+    }
   </style>
 </head>
 <body>
@@ -32,8 +53,10 @@
       <h2 id="nomeTurno" style="margin: 0; color: #333;">Carregando turno...</h2>
       <small id="inicioTurno" style="color: #666;"></small>
     </div>
-    <div>
-      <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">🚨 ALERTA: CHEGOU ÔNIBUS</button>
+    <div style="display: flex; align-items: center;">
+      <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">
+        🚌 <span>Ônibus</span>
+      </button>
       <button class="btn-turno" onclick="fecharTurno()">Fechar Caixa e Gerar PDF</button>
     </div>
   </div>
@@ -52,10 +75,10 @@
       const btnA = document.getElementById('btnAlerta');
       if (modoOnibus) {
         btnA.classList.add('ativo');
-        btnA.innerText = "🚌 ÔNIBUS CHEGOU (CLIQUE P/ DESATIVAR)";
+        btnA.innerHTML = "🚌 <span>Ônibus Ativo</span>";
       } else {
         btnA.classList.remove('ativo');
-        btnA.innerText = "🚨 ALERTA: CHEGOU ÔNIBUS";
+        btnA.innerHTML = "🚌 <span>Ônibus</span>";
       }
 
       document.getElementById('nomeTurno').innerText = turno.nome;
@@ -76,40 +99,4 @@
 
         let itensHTML = c.itens.map(i => {
           const txtQtd = i.qtd > 1 ? `<b>${i.qtd}x</b> ` : '';
-          return `<div class="item"><span>${txtQtd}${i.nome}</span><span>R$ ${(i.preco * i.qtd).toFixed(2)}</span></div>`;
-        }).join('');
-
-        card.innerHTML = `
-          <div class="comanda-header">
-            <span class="num-comanda">Comanda #${num}</span>
-            <span class="badge ${c.tabela}">${c.tabela.toUpperCase()}</span>
-          </div>
-          <div class="lista-itens">${itensHTML}</div>
-          <div class="total">TOTAL: R$ ${c.total.toFixed(2)}</div>
-          <button class="btn-fechar" onclick="cobrar('${num}', ${c.total.toFixed(2)})">Cobrar e Liberar</button>
-        `;
-        grid.appendChild(card);
-      });
-    });
-
-    function alternarAlerta() {
-      socket.emit('alternar-alerta-onibus', !modoOnibusAtual);
-    }
-
-    function cobrar(numComanda, total) {
-      if (confirm(`Cobrar R$ ${total} da Comanda #${numComanda}?`)) {
-        socket.emit('fechar-comanda', numComanda);
-      }
-    }
-
-    function fecharTurno() {
-      const proximoTurno = prompt("Nome do PRÓXIMO turno (ex: Turno 2 - Almoço):");
-      if (proximoTurno) socket.emit('fechar-turno', proximoTurno);
-    }
-
-    socket.on('turno-fechado-sucesso', (nomeArquivo) => {
-      alert(`Caixa fechado com sucesso!\nRelatório gerado em /relatorios:\n${nomeArquivo}`);
-    });
-  </script>
-</body>
-</html>
+          return `<div class="item"><span>${
