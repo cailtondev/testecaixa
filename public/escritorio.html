@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Escritório - Gestão de Preços</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #eef2f5; margin: 0; }
+    .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .form-prod { display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; }
+    .form-prod input, .form-prod select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
+    .btn-salvar { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    th, td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+    th { background: #f8f9fa; }
+    .btn-edit { background: #ffc107; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; }
+    .btn-del { background: #dc3545; color:white; border:none; padding:4px 8px; border-radius:3px; cursor:pointer; }
+    .btn-alerta { background: #ffc107; color: #000; border: none; padding: 15px 20px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 18px; width: 100%; margin-bottom: 20px; }
+    .btn-alerta.ativo { background: #dc3545; color: white; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <h2>Painel do Escritório - Boi da Estrada</h2>
+    <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">🚨 DISPARAR ALERTA DE ÔNIBUS PARA O BALCÃO</button>
+  </div>
+
+  <div class="card">
+    <h3>Cadastrar / Editar Produtos e Preços</h3>
+    <div class="form-prod">
+      <input type="text" id="pId" placeholder="Código (Ex: 117)">
+      <input type="text" id="pNome" placeholder="Nome do Item (Ex: Refri Lata)">
+      <select id="pCat">
+        <option value="comidas">Comidas / Salgados</option>
+        <option value="bebidas">Bebidas sem Álcool</option>
+        <option value="cervejas">Bebidas Quentes / Cervejas</option>
+      </select>
+      <input type="number" id="pPrecoOnibus" step="0.50" placeholder="R$ Ônibus">
+      <input type="number" id="pPrecoPasseio" step="0.50" placeholder="R$ Passeio">
+      <button class="btn-salvar" onclick="salvarProduto()">Salvar no Banco</button>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Nome</th>
+          <th>Categoria</th>
+          <th>Preço Ônibus</th>
+          <th>Preço Passeio</th>
+          <th>Ações</th>
+        </tr>
+      </thead>
+      <tbody id="tabelaProdutos"></tbody>
+    </table>
+  </div>
+
+  <script>
+    const socket = io();
+    let listaProds = [];
+    let modoOnibusAtual = false;
+
+    socket.on('atualizar-caixa', (data) => {
+      modoOnibusAtual = data.modoOnibus;
+      const btnA = document.getElementById('btnAlerta');
+      if (modoOnibusAtual) {
+        btnA.classList.add('ativo');
+        btnA.innerText = "🚌 ALERTA DE ÔNIBUS ATIVO (CLIQUE PARA DESATIVAR)";
+      } else {
+        btnA.classList.remove('ativo');
+        btnA.innerText = "🚨 DISPARAR ALERTA DE ÔNIBUS PARA O BALCÃO";
+      }
+    });
+
+    socket.on('atualizar-produtos', (produtos) => {
+      listaProds = produtos;
+      const tbody = document.getElementById('tabelaProdutos');
+      tbody.innerHTML = '';
+
+      produtos.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td><b>${p.id}</b></td>
+          <td>${p.nome}</td>
+          <td>${p.categoria.toUpperCase()}</td>
+          <td>R$ ${p.precoOnibus.toFixed(2)}</td>
+          <td>R$ ${p.precoPasseio.toFixed(2)}</td>
+          <td>
+            <button class="btn-edit" onclick="editar('${p.id}')">Editar</button>
+            <button class="btn-del" onclick="deletar('${p.id}')">Excluir</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    });
+
+    function alternarAlerta() {
+      socket.emit('alternar-alerta-onibus', !modoOnibusAtual);
+    }
+
+    function salvarProduto() {
+      const id = document.getElementById('pId').value;
+      const nome = document.getElementById('pNome').value;
+      const categoria = document.getElementById('pCat').value;
+      const precoOnibus = document.getElementById('pPrecoOnibus').value;
+      const precoPasseio = document.getElementById('pPrecoPasseio').value;
+
+      if (!id || !nome || !precoOnibus || !precoPasseio) {
+        alert('Preencha todos os campos!');
+        return;
+      }
+
+      socket.emit('salvar-produto', { id, nome, categoria, precoOnibus, precoPasseio });
+
+      document.getElementById('pId').value = '';
+      document.getElementById('pNome').value = '';
+      document.getElementById('pPrecoOnibus').value = '';
+      document.getElementById('pPrecoPasseio').value = '';
+    }
+
+    function editar(id) {
+      const p = listaProds.find(i => i.id === id);
+      if (p) {
+        document.getElementById('pId').value = p.id;
+        document.getElementById('pNome').value = p.nome;
+        document.getElementById('pCat').value = p.categoria;
+        document.getElementById('pPrecoOnibus').value = p.precoOnibus;
+        document.getElementById('pPrecoPasseio').value = p.precoPasseio;
+      }
+    }
+
+    function deletar(id) {
+      if (confirm(`Remover produto ${id}?`)) {
+        socket.emit('deletar-produto', id);
+      }
+    }
+  </script>
+</body>
+</html>
