@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Balcão - Boi da Estrada</title>
+  <title>Balcão - Lançamento</title>
   <script src="/socket.io/socket.io.js"></script>
   <style>
     body { font-family: sans-serif; padding: 12px; background: #f4f4f9; margin: 0; }
@@ -21,6 +21,7 @@
     .modal-content { background: white; padding: 25px; border-radius: 10px; text-align: center; width: 85%; max-width: 350px; }
     .categoria-bloco { display: none; }
     .categoria-bloco.ativa { display: block; }
+    .banner-onibus { display: none; background: #dc3545; color: white; text-align: center; padding: 10px; font-weight: bold; font-size: 18px; border-radius: 6px; margin-bottom: 12px; }
   </style>
 </head>
 <body>
@@ -35,6 +36,9 @@
   </div>
 
   <div id="conteudoBalcao" style="display: none;">
+    
+    <div id="bannerOnibus" class="banner-onibus">🚌 ATENÇÃO: ÔNIBUS CHEGOU! TABELA ÔNIBUS ATIVADA</div>
+
     <div class="card">
       <label><b>Nº da Comanda:</b></label>
       <input type="number" id="numComanda" placeholder="Ex: 07" onchange="atualizarVisualizacao()">
@@ -51,7 +55,7 @@
       <select id="categoriaDropdown" onchange="mudarCategoria()">
         <option value="comidas">Comidas / Salgados</option>
         <option value="bebidas">Bebidas sem Álcool</option>
-        <option value="cervejas">Cervejas / Bebidas Quentes</option>
+        <option value="cervejas">Bebidas Quentes / Cervejas</option>
         <option value="manual">Valor Manual (Balança / Salgadinho)</option>
       </select>
 
@@ -90,6 +94,18 @@
         document.getElementById('conteudoBalcao').style.display = 'block';
       } else {
         document.getElementById('loginErro').innerText = res.msg;
+      }
+    });
+
+    socket.on('alerta-onibus-disparado', (status) => {
+      const banner = document.getElementById('bannerOnibus');
+      const selectTab = document.getElementById('tabela');
+      if (status) {
+        banner.style.display = 'block';
+        selectTab.value = 'onibus';
+        renderizarBotoesProdutos();
+      } else {
+        banner.style.display = 'none';
       }
     });
 
@@ -150,6 +166,10 @@
 
     socket.on('atualizar-caixa', (data) => {
       comandasLocais = data.comandas;
+      if (data.modoOnibus) {
+        document.getElementById('bannerOnibus').style.display = 'block';
+        document.getElementById('tabela').value = 'onibus';
+      }
       atualizarVisualizacao();
     });
 
