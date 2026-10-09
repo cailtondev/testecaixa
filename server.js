@@ -12,6 +12,7 @@ const io = new Server(server, { cors: { origin: "*" } });
 
 app.use(express.static('public'));
 
+
 const pastaRelatorios = path.join(__dirname, 'relatorios');
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 
