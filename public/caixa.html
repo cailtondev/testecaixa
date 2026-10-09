@@ -8,7 +8,7 @@
   <style>
     body { font-family: sans-serif; padding: 20px; background: #eef2f5; margin: 0; }
     .header-caixa { display: flex; justify-content: space-between; align-items: center; background: #fff; padding: 15px 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .grid-comandas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; margin-bottom: 30px; }
+    .grid-comandas { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 15px; }
     .card-comanda { background: white; border-radius: 8px; padding: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); border-top: 6px solid #007bff; }
     .card-comanda.passeio { border-top-color: #28a745; }
     .comanda-header { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; }
@@ -20,16 +20,9 @@
     .total { font-size: 20px; font-weight: bold; text-align: right; margin-top: 10px; color: #d9534f; border-top: 1px solid #eee; padding-top: 5px; }
     .btn-fechar { width: 100%; padding: 12px; background: #28a745; color: white; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
     .btn-turno { background: #dc3545; color: white; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; }
-    .painel-produtos { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-    .form-prod { display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr auto; gap: 10px; margin-bottom: 15px; }
-    .form-prod input, .form-prod select { padding: 8px; font-size: 14px; border: 1px solid #ccc; border-radius: 4px; }
-    .btn-salvar-p { background: #007bff; color: white; border: none; padding: 8px 15px; border-radius: 4px; font-weight: bold; cursor: pointer; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-    th { background: #f8f9fa; }
-    .btn-acao { padding: 4px 8px; border: none; border-radius: 3px; cursor: pointer; color: white; font-weight: bold; font-size: 12px; }
-    .btn-edit { background: #ffc107; color: #000; }
-    .btn-del { background: #dc3545; }
+    .btn-alerta { background: #ffc107; color: #000; border: none; padding: 10px 15px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 15px; margin-right: 10px; }
+    .btn-alerta.ativo { background: #dc3545; color: white; animation: pisca 1s infinite; }
+    @keyframes pisca { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
   </style>
 </head>
 <body>
@@ -39,48 +32,32 @@
       <h2 id="nomeTurno" style="margin: 0; color: #333;">Carregando turno...</h2>
       <small id="inicioTurno" style="color: #666;"></small>
     </div>
-    <button class="btn-turno" onclick="fecharTurno()">Fechar Caixa e Gerar PDF</button>
-  </div>
-
-  <h2>Comandas Ativas</h2>
-  <div id="gridComandas" class="grid-comandas"></div>
-
-  <div class="painel-produtos">
-    <h3>Gerenciar Produtos e Tabela de Preços</h3>
-    <div class="form-prod">
-      <input type="text" id="pId" placeholder="Código (Ex: 117)">
-      <input type="text" id="pNome" placeholder="Nome do Item (Ex: Refri Lata)">
-      <select id="pCat">
-        <option value="comidas">Comidas</option>
-        <option value="bebidas">Bebidas</option>
-        <option value="cervejas">Cervejas</option>
-      </select>
-      <input type="number" id="pPrecoOnibus" step="0.50" placeholder="R$ Ônibus">
-      <input type="number" id="pPrecoPasseio" step="0.50" placeholder="R$ Passeio">
-      <button class="btn-salvar-p" onclick="salvarProduto()">Salvar / Atualizar</button>
+    <div>
+      <button id="btnAlerta" class="btn-alerta" onclick="alternarAlerta()">🚨 ALERTA: CHEGOU ÔNIBUS</button>
+      <button class="btn-turno" onclick="fecharTurno()">Fechar Caixa e Gerar PDF</button>
     </div>
-
-    <table>
-      <thead>
-        <tr>
-          <th>Código</th>
-          <th>Nome do Produto</th>
-          <th>Categoria</th>
-          <th>Preço Ônibus</th>
-          <th>Preço Passeio</th>
-          <th>Ações</th>
-        </tr>
-      </thead>
-      <tbody id="tabelaProdutos"></tbody>
-    </table>
   </div>
+
+  <h2>Comandas Ativas no Caixa</h2>
+  <div id="gridComandas" class="grid-comandas"></div>
 
   <script>
     const socket = io();
-    let listaProdutosLocal = [];
+    let modoOnibusAtual = false;
 
     socket.on('atualizar-caixa', (data) => {
-      const { comandas, turno } = data;
+      const { comandas, turno, modoOnibus } = data;
+      modoOnibusAtual = modoOnibus;
+
+      const btnA = document.getElementById('btnAlerta');
+      if (modoOnibus) {
+        btnA.classList.add('ativo');
+        btnA.innerText = "🚌 ÔNIBUS CHEGOU (CLIQUE P/ DESATIVAR)";
+      } else {
+        btnA.classList.remove('ativo');
+        btnA.innerText = "🚨 ALERTA: CHEGOU ÔNIBUS";
+      }
+
       document.getElementById('nomeTurno').innerText = turno.nome;
       document.getElementById('inicioTurno').innerText = `Aberto em: ${new Date(turno.inicio).toLocaleString('pt-BR')}`;
 
@@ -115,63 +92,8 @@
       });
     });
 
-    socket.on('atualizar-produtos', (produtos) => {
-      listaProdutosLocal = produtos;
-      const tbody = document.getElementById('tabelaProdutos');
-      tbody.innerHTML = '';
-
-      produtos.forEach(p => {
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-          <td><b>${p.id}</b></td>
-          <td>${p.nome}</td>
-          <td>${p.categoria.toUpperCase()}</td>
-          <td>R$ ${p.precoOnibus.toFixed(2)}</td>
-          <td>R$ ${p.precoPasseio.toFixed(2)}</td>
-          <td>
-            <button class="btn-acao btn-edit" onclick="preencherEdicao('${p.id}')">Editar</button>
-            <button class="btn-acao btn-del" onclick="deletarProduto('${p.id}')">Excluir</button>
-          </td>
-        `;
-        tbody.appendChild(tr);
-      });
-    });
-
-    function salvarProduto() {
-      const id = document.getElementById('pId').value;
-      const nome = document.getElementById('pNome').value;
-      const categoria = document.getElementById('pCat').value;
-      const precoOnibus = document.getElementById('pPrecoOnibus').value;
-      const precoPasseio = document.getElementById('pPrecoPasseio').value;
-
-      if (!id || !nome || !precoOnibus || !precoPasseio) {
-        alert('Preencha todos os campos do produto!');
-        return;
-      }
-
-      socket.emit('salvar-produto', { id, nome, categoria, precoOnibus, precoPasseio });
-
-      document.getElementById('pId').value = '';
-      document.getElementById('pNome').value = '';
-      document.getElementById('pPrecoOnibus').value = '';
-      document.getElementById('pPrecoPasseio').value = '';
-    }
-
-    function preencherEdicao(id) {
-      const p = listaProdutosLocal.find(item => item.id === id);
-      if (p) {
-        document.getElementById('pId').value = p.id;
-        document.getElementById('pNome').value = p.nome;
-        document.getElementById('pCat').value = p.categoria;
-        document.getElementById('pPrecoOnibus').value = p.precoOnibus;
-        document.getElementById('pPrecoPasseio').value = p.precoPasseio;
-      }
-    }
-
-    function deletarProduto(id) {
-      if (confirm(`Remover produto ${id} do sistema?`)) {
-        socket.emit('deletar-produto', id);
-      }
+    function alternarAlerta() {
+      socket.emit('alternar-alerta-onibus', !modoOnibusAtual);
     }
 
     function cobrar(numComanda, total) {
