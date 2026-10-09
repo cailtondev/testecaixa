@@ -18,9 +18,13 @@ if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
 // CONEXÃO COM O MONGODB ATLAS
 const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:bTpcMLimRIP4gUes@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
 
-mongoose.connect(MONGO_URI)
+mongoose.set('bufferCommands', false);
+
+mongoose.connect(MONGO_URI, {
+  serverSelectionTimeoutMS: 5000 // Tenta conectar por 5 segundos
+})
   .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
-  .catch(err => console.error('❌ Erro de Conexão no MongoDB:', err));
+  .catch(err => console.error('❌ Erro de Conexão no MongoDB Atlas:', err.message));
 
 // SCHEMA DE PRODUTOS
 const produtoSchema = new mongoose.Schema({
