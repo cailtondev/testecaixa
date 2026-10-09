@@ -8,23 +8,15 @@ const PDFDocument = require('pdfkit');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: "*" } });
+const io = new Server(server, { 
+  cors: { origin: "*" },
+  transports: ['polling', 'websocket']
+});
 
 app.use(express.static('public'));
 
 const pastaRelatorios = path.join(__dirname, 'relatorios');
 if (!fs.existsSync(pastaRelatorios)) fs.mkdirSync(pastaRelatorios);
-
-// CONEXÃO COM O MONGODB ATLAS
-const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:cailton@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
-
-mongoose.set('bufferCommands', false);
-
-mongoose.connect(MONGO_URI, {
-  serverSelectionTimeoutMS: 5000 // Tenta conectar por 5 segundos
-})
-  .then(() => console.log('✅ Conectado ao MongoDB Atlas com sucesso!'))
-  .catch(err => console.error('❌ Erro de Conexão no MongoDB Atlas:', err.message));
 
 // SCHEMA DE PRODUTOS
 const produtoSchema = new mongoose.Schema({
@@ -35,6 +27,23 @@ const produtoSchema = new mongoose.Schema({
   precoPasseio: Number
 });
 const Produto = mongoose.model('Produto', produtoSchema);
+
+// CONEXÃO ASSÍNCRONA COM O MONGODB ATLAS (NÃO BLOQUEIA O SOCKET)
+const MONGO_URI = process.env.MONGO_URI || "mongodb+srv://cailtondev_db_user:cailton@dadoscaixa.nnb7cjq.mongodb.net/dadoscaixa?retryWrites=true&w=majority";
+
+mongoose.set('bufferCommands', false);
+
+let mongoConectado = false;
+
+mongoose.connect(MONGO_URI, { serverSelectionTimeoutMS: 5000 })
+  .then(() => {
+    mongoConectado = true;
+    console.log('✅ Conectado ao MongoDB Atlas com sucesso!');
+  })
+  .catch(err => {
+    mongoConectado = false;
+    console.error('⚠️ AVISO: Não foi possível conectar ao MongoDB Atlas. O sistema rodará em memória RAM:', err.message);
+  });
 
 const PIN_BALCAO = "1234";
 let comandasAtivas = {};
@@ -54,18 +63,17 @@ app.get('/escritorio', (req, res) => res.sendFile(path.join(__dirname, 'public',
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, 'public', 'caixa.html')));
 
 io.on('connection', (socket) => {
-  // 1. Envia imediatamente o estado do caixa e turno (destrava a tela do caixa)
+  // Envia imediatamente para o cliente sem esperar pelo banco
   socket.emit('atualizar-caixa', { comandas: comandasAtivas, turno: turnoAtual, modoOnibus: modoOnibusAtivo });
 
-  // 2. Busca produtos sem travar a conexão
-  Produto.find().sort({ id: 1 })
-    .then(listaProds => {
-      socket.emit('atualizar-produtos', listaProds);
-    })
-    .catch(err => {
-      console.error('Erro ao buscar produtos:', err);
-      socket.emit('atualizar-produtos', []);
-    });
+  // Tenta buscar produtos no MongoDB se estiver conectado
+  if (mongoConectado) {
+    Produto.find().sort({ id: 1 })
+      .then(listaProds => socket.emit('atualizar-produtos', listaProds))
+      .catch(() => socket.emit('atualizar-produtos', []));
+  } else {
+    socket.emit('atualizar-produtos', []);
+  }
 
   socket.on('login-balcao', (pin) => {
     if (pin !== PIN_BALCAO) {
@@ -91,21 +99,25 @@ io.on('connection', (socket) => {
         precoPasseio: parseFloat(pData.precoPasseio) || 0
       };
 
-      await Produto.findOneAndUpdate({ id: prodFormatado.id }, prodFormatado, { upsert: true, new: true });
-      const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
-      io.emit('atualizar-produtos', listaProdsAtualizada);
+      if (mongoConectado) {
+        await Produto.findOneAndUpdate({ id: prodFormatado.id }, prodFormatado, { upsert: true, new: true });
+        const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
+        io.emit('atualizar-produtos', listaProdsAtualizada);
+      }
     } catch (e) {
-      console.error('Erro ao salvar produto:', e);
+      console.error('Erro ao salvar produto:', e.message);
     }
   });
 
   socket.on('deletar-produto', async (id) => {
     try {
-      await Produto.deleteOne({ id: String(id) });
-      const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
-      io.emit('atualizar-produtos', listaProdsAtualizada);
+      if (mongoConectado) {
+        await Produto.deleteOne({ id: String(id) });
+        const listaProdsAtualizada = await Produto.find().sort({ id: 1 });
+        io.emit('atualizar-produtos', listaProdsAtualizada);
+      }
     } catch (e) {
-      console.error('Erro ao deletar produto:', e);
+      console.error('Erro ao deletar produto:', e.message);
     }
   });
 
