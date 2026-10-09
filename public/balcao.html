@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Balcão - Boi da Estrada</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 12px; background: #f4f4f9; margin: 0; }
+    .card { background: #fff; padding: 12px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 12px; }
+    input, select { width: 100%; padding: 12px; font-size: 16px; margin: 4px 0 10px; border: 1px solid #ccc; border-radius: 5px; box-sizing: border-box; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    button { padding: 14px; font-size: 15px; border: none; border-radius: 6px; color: white; font-weight: bold; cursor: pointer; }
+    .btn-comida { background: #28a745; }
+    .btn-bebida { background: #17a2b8; }
+    .btn-cerveja { background: #ffc107; color: #000; }
+    .btn-manual { background: #6f42c1; width: 100%; font-size: 16px; margin-top: 5px; }
+    .btn-remover { background: #dc3545; padding: 6px 10px; font-size: 12px; border-radius: 4px; }
+    .item-linha { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 6px 0; }
+    .modal-login { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); display: flex; justify-content: center; align-items: center; }
+    .modal-content { background: white; padding: 25px; border-radius: 10px; text-align: center; width: 85%; max-width: 350px; }
+    .categoria-bloco { display: none; }
+    .categoria-bloco.ativa { display: block; }
+  </style>
+</head>
+<body>
+
+  <div id="modalLogin" class="modal-login">
+    <div class="modal-content">
+      <h2>Acesso ao Balcão</h2>
+      <input type="password" id="pinInput" placeholder="Código PIN" maxlength="6">
+      <button style="background:#007bff; width:100%; margin-top:10px;" onclick="autenticar()">Entrar</button>
+      <p id="loginErro" style="color: red; margin-top: 10px;"></p>
+    </div>
+  </div>
+
+  <div id="conteudoBalcao" style="display: none;">
+    <div class="card">
+      <label><b>Nº da Comanda:</b></label>
+      <input type="number" id="numComanda" placeholder="Ex: 07" onchange="atualizarVisualizacao()">
+
+      <label><b>Tabela de Preço:</b></label>
+      <select id="tabela" onchange="renderizarBotoesProdutos()">
+        <option value="onibus">Ônibus</option>
+        <option value="passeio">Carro / Passeio</option>
+      </select>
+    </div>
+
+    <div class="card">
+      <label><b>Selecione a Categoria:</b></label>
+      <select id="categoriaDropdown" onchange="mudarCategoria()">
+        <option value="comidas">Comidas / Salgados</option>
+        <option value="bebidas">Bebidas sem Álcool</option>
+        <option value="cervejas">Cervejas / Bebidas Quentes</option>
+        <option value="manual">Valor Manual (Balança / Salgadinho)</option>
+      </select>
+
+      <div id="cat-comidas" class="categoria-bloco ativa"><div class="grid" id="grid-comidas"></div></div>
+      <div id="cat-bebidas" class="categoria-bloco"><div class="grid" id="grid-bebidas"></div></div>
+      <div id="cat-cervejas" class="categoria-bloco"><div class="grid" id="grid-cervejas"></div></div>
+
+      <div id="cat-manual" class="categoria-bloco">
+        <label>Nome do Produto / Balança:</label>
+        <input type="text" id="manualNome" placeholder="Ex: Buffê / Salgadinho">
+        <label>Valor Total (R$):</label>
+        <input type="number" id="manualValor" step="0.01" placeholder="Ex: 24.50">
+        <button class="btn-manual" onclick="lancarManual()">Lançar Valor Manual</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-top:0;">Itens da Comanda Ativa</h3>
+      <div id="listaComandaBalcao">Digite o número da comanda...</div>
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    let comandasLocais = {};
+    let listaProdutosGlobal = [];
+
+    function autenticar() {
+      const pin = document.getElementById('pinInput').value;
+      socket.emit('login-balcao', pin);
+    }
+
+    socket.on('login-resposta', (res) => {
+      if (res.sucesso) {
+        document.getElementById('modalLogin').style.display = 'none';
+        document.getElementById('conteudoBalcao').style.display = 'block';
+      } else {
+        document.getElementById('loginErro').innerText = res.msg;
+      }
+    });
+
+    socket.on('atualizar-produtos', (produtos) => {
+      listaProdutosGlobal = produtos;
+      renderizarBotoesProdutos();
+    });
+
+    function renderizarBotoesProdutos() {
+      const tab = document.getElementById('tabela').value;
+      ['comidas', 'bebidas', 'cervejas'].forEach(cat => {
+        const container = document.getElementById('grid-' + cat);
+        if (!container) return;
+        container.innerHTML = '';
+
+        const prodsCat = listaProdutosGlobal.filter(p => p.categoria === cat);
+        prodsCat.forEach(p => {
+          const precoExib = (tab === 'passeio') ? p.precoPasseio : p.precoOnibus;
+          const btn = document.createElement('button');
+          btn.className = cat === 'comidas' ? 'btn-comida' : (cat === 'bebidas' ? 'btn-bebida' : 'btn-cerveja');
+          btn.innerText = `${p.id} - ${p.nome} (R$ ${precoExib.toFixed(2)})`;
+          btn.onclick = () => lancarItemObjeto(p);
+          container.appendChild(btn);
+        });
+      });
+    }
+
+    function mudarCategoria() {
+      const cat = document.getElementById('categoriaDropdown').value;
+      document.querySelectorAll('.categoria-bloco').forEach(b => b.classList.remove('ativa'));
+      document.getElementById('cat-' + cat).classList.add('ativa');
+    }
+
+    function lancarItemObjeto(itemObj) {
+      const numComanda = document.getElementById('numComanda').value;
+      const tabela = document.getElementById('tabela').value;
+      if (!numComanda) { alert('Digite o número da comanda!'); return; }
+      socket.emit('lancar-item', { numComanda, itemObj, tabela });
+    }
+
+    function lancarManual() {
+      const numComanda = document.getElementById('numComanda').value;
+      const tabela = document.getElementById('tabela').value;
+      const nome = document.getElementById('manualNome').value || 'Item Diverso';
+      const valor = document.getElementById('manualValor').value;
+
+      if (!numComanda || !valor) { alert('Digite a comanda e o valor!'); return; }
+      socket.emit('lancar-manual', { numComanda, nome, valor, tabela });
+      document.getElementById('manualValor').value = '';
+    }
+
+    function removerItem(indexItem) {
+      const numComanda = document.getElementById('numComanda').value;
+      if (numComanda && confirm('Remover 1x deste item?')) {
+        socket.emit('remover-item', { numComanda, indexItem });
+      }
+    }
+
+    socket.on('atualizar-caixa', (data) => {
+      comandasLocais = data.comandas;
+      atualizarVisualizacao();
+    });
+
+    function atualizarVisualizacao() {
+      const numComanda = document.getElementById('numComanda').value;
+      const divLista = document.getElementById('listaComandaBalcao');
+
+      if (!numComanda || !comandasLocais[numComanda]) {
+        divLista.innerHTML = '<i>Nenhum item nesta comanda no momento.</i>';
+        return;
+      }
+
+      const c = comandasLocais[numComanda];
+      let html = '';
+
+      c.itens.forEach((item, index) => {
+        const txtQtd = item.qtd > 1 ? `<b>${item.qtd}x</b> ` : '';
+        html += `
+          <div class="item-linha">
+            <span>${txtQtd}${item.nome} - R$ ${(item.preco * item.qtd).toFixed(2)}</span>
+            <button class="btn-remover" onclick="removerItem(${index})">Remover 1x</button>
+          </div>
+        `;
+      });
+
+      html += `<div style="text-align:right; font-weight:bold; margin-top:10px; font-size:18px;">Total: R$ ${c.total.toFixed(2)}</div>`;
+      divLista.innerHTML = html;
+    }
+  </script>
+</body>
+</html>

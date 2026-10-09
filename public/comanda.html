@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Comanda Digital - Boi da Estrada</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 15px; background: #eef2f5; margin: 0; }
+    .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); max-width: 400px; margin: 20px auto; }
+    .header { text-align: center; border-bottom: 2px dashed #ccc; padding-bottom: 12px; }
+    .item { display: flex; justify-content: space-between; margin: 12px 0; font-size: 16px; }
+    .total-box { background: #d9534f; color: white; padding: 15px; border-radius: 8px; text-align: center; font-size: 22px; font-weight: bold; margin-top: 20px; }
+    .footer { text-align: center; margin-top: 15px; color: #666; font-size: 13px; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="header">
+      <h2 style="margin:0; color:#333;">BOI DA ESTRADA</h2>
+      <small style="color:#777;">Churrascaria & Lanchonete</small>
+      <h3 id="numComandaTitulo" style="color:#007bff; margin-top:10px;">Comanda #--</h3>
+    </div>
+
+    <div id="listaItens" style="margin-top: 15px;">Carregando consumo...</div>
+
+    <div class="total-box">
+      TOTAL: R$ <span id="valorTotal">0,00</span>
+    </div>
+
+    <div class="footer">
+      Dirija-se ao caixa para efetuar o pagamento.
+    </div>
+  </div>
+
+  <script>
+    const socket = io();
+    const urlParams = new URLSearchParams(window.location.search);
+    const numComanda = urlParams.get('id');
+
+    if (numComanda) {
+      document.getElementById('numComandaTitulo').innerText = `Comanda #${numComanda}`;
+    }
+
+    socket.on('atualizar-caixa', (data) => {
+      const comandas = data.comandas;
+      const divLista = document.getElementById('listaItens');
+      const spanTotal = document.getElementById('valorTotal');
+
+      if (!numComanda || !comandas[numComanda]) {
+        divLista.innerHTML = '<i style="color:#888;">Nenhum item lançado nesta comanda.</i>';
+        spanTotal.innerText = '0,00';
+        return;
+      }
+
+      const c = comandas[numComanda];
+      let html = '';
+
+      c.itens.forEach(item => {
+        const txtQtd = item.qtd > 1 ? `<b>${item.qtd}x</b> ` : '';
+        html += `
+          <div class="item">
+            <span>${txtQtd}${item.nome}</span>
+            <span>R$ ${(item.preco * item.qtd).toFixed(2)}</span>
+          </div>
+        `;
+      });
+
+      divLista.innerHTML = html;
+      spanTotal.innerText = c.total.toFixed(2);
+    });
+  </script>
+</body>
+</html>
